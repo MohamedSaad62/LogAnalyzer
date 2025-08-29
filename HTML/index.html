@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Log analyzer</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background-color: #e6f7e6; }
+    .container { display: flex; height: 100vh; }
+    .panel { flex: 1; padding: 20px; display: flex; flex-direction: column; border-right: 2px solid #ccc; }
+    .panel:last-child { border-right: none; }
+    .messages { flex: 1; background: #fff; border-radius: 10px; padding: 10px; margin-bottom: 10px; overflow-y: auto; white-space: pre-wrap; }
+    textarea, input { width: 100%; padding: 8px; border-radius: 8px; border: 1px solid #aaa; resize: vertical; margin-top: 5px; }
+    button { margin-top: 5px; padding: 8px 12px; border: none; border-radius: 8px; background: #4caf50; color: white; cursor: pointer; }
+    button:hover { background: #45a049; }
+    .nav { margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Left panel: LLM A -->
+    <div class="panel">
+      <h2>Log Analyzer</h2>
+      <div class="messages" id="messagesA"></div>
+      <textarea id="inputA" rows="4" placeholder="Paste logs here..."></textarea>
+
+      <!-- New file upload -->
+      <input type="file" id="fileInput" accept=".txt,.log" />
+      <button onclick="loadFile()">Load File</button>
+
+      <button onclick="sendToLLMA()">Analyze Logs</button>
+      <div id="navControls" class="nav" style="display:none;">
+        <button onclick="showNextError()">Next</button>
+        <input type="number" id="errorIndex" placeholder="Enter error index..." min="1" style="width:120px;">
+        <button onclick="jumpToError()">Go</button>
+      </div>
+    </div>
+
+    <!-- Right panel: LLM B -->
+    <div class="panel">
+      <h2> Free Chat</h2>
+      <div class="messages" id="messagesB"></div>
+      <input id="inputB" placeholder="Type your message..." />
+      <button onclick="sendToLLMB()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    let currentIndex = 0;
+    let errors = [];
+    let suggestions = [];
+
+    function loadFile() {
+      const fileInput = document.getElementById("fileInput");
+      if (fileInput.files.length === 0) {
+        alert("Please select a file first!");
+        return;
+      }
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById("inputA").value = e.target.result;
+      };
+      reader.readAsText(file);
+    }
+
+    async function sendToLLMA() {
+      const log = document.getElementById("inputA").value;
+      if (!log.trim()) return;
+
+      const res = await fetch("/llm_a", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log })
+      });
+      const data = await res.json();
+
+      errors = data.errors || [];
+      suggestions = data.suggestions || [];
+      currentIndex = 0;
+
+      if (errors.length > 0) {
+        document.getElementById("navControls").style.display = "block";
+        showError(0);
+      } else {
+        document.getElementById("messagesA").innerHTML = "✅ No errors found!";
+        document.getElementById("navControls").style.display = "none";
+      }
+    }
+
+    function showError(index) {
+      const msgBox = document.getElementById("messagesA");
+      if (index < errors.length && index >= 0) {
+        msgBox.innerHTML = `
+          <strong>Error ${index + 1} of ${errors.length}:</strong><br>
+          ${errors[index]}<br><br>
+          <strong>Suggestion:</strong><br>
+          ${suggestions[index]}
+        `;
+        currentIndex = index;
+      }
+    }
+
+    function showNextError() {
+      if (currentIndex + 1 < errors.length) {
+        showError(currentIndex + 1);
+      } else {
+        document.getElementById("messagesA").innerHTML = "";
+      }
+    }
+
+    function jumpToError() {
+      const input = document.getElementById("errorIndex").value;
+      const index = parseInt(input, 10) - 1;
+      if (!isNaN(index) && index >= 0 && index < errors.length) {
+        showError(index);
+      } else {
+        alert("Invalid index! Enter a number between 1 and " + errors.length);
+      }
+    }
+
+    async function sendToLLMB() {
+      const message = document.getElementById("inputB").value;
+      if (!message.trim()) return;
+
+      const res = await fetch("/llm_b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message })
+      });
+      const data = await res.json();
+
+      const msgBox = document.getElementById("messagesB");
+      msgBox.innerHTML += "You: " + message + "\nLLM B: " + data.reply + "\n\n";
+      document.getElementById("inputB").value = "";
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }
+  </script>
+</body>
+</html>
