@@ -73,6 +73,7 @@ async def llm_a(req: LogRequest):
 @app.post("/llm_b")
 async def llm_b(req: ChatRequest):
     user_msg = req.message
+    user_msg += 'answer me with no more than 200 words' # this add because of very long response of gemini which might be not practical
     headers = {
     "Content-Type": "application/json",
     "X-goog-api-key": GEMINI_API
